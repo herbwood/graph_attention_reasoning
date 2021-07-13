@@ -1,5 +1,5 @@
 import sys
-sys.path.append('/your_dir/classification')
+sys.path.append('classification')
 import torch
 import argparse
 import os
@@ -14,8 +14,9 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from torch.autograd import Variable
-from utils import AverageMeter
-from utils.LoadData import train_data_loader
+from util.LoadData import train_data_loader
+from util.avgMeter import AverageMeter
+
 from tqdm import trange, tqdm
 
 ROOT_DIR = '/'.join(os.getcwd().split('/')[:-1])
@@ -24,26 +25,26 @@ print('Project Root Dir:', ROOT_DIR)
 def get_arguments():
     parser = argparse.ArgumentParser(description='The Pytorch code of NSROM')
     parser.add_argument("--root_dir", type=str, default=ROOT_DIR, help='Root dir for the project')
-    parser.add_argument("--img_dir", type=str, default='', help='Directory of training images')
-    parser.add_argument("--train_list", type=str, default='None')
-    parser.add_argument("--test_list", type=str, default='None')
-    parser.add_argument("--batch_size", type=int, default=20)
+    parser.add_argument("--img_dir", type=str, default='../dataset/VOC2012/JPEGImages/', help='')
+    parser.add_argument("--train_list", type=str, default='classification/data/train_cls.txt')
+    parser.add_argument("--test_list", type=str, default='classification/data/val_cls.txt')
+    parser.add_argument("--batch_size", type=int, default=5)
     parser.add_argument("--input_size", type=int, default=256)
     parser.add_argument("--crop_size", type=int, default=224)
-    parser.add_argument("--dataset", type=str, default='imagenet')
+    parser.add_argument("--dataset", type=str, default='pascal_voc')
     parser.add_argument("--num_classes", type=int, default=20)
     parser.add_argument("--threshold", type=float, default=0.6)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--weight_decay", type=float, default=0.0005)
-    parser.add_argument("--decay_points", type=str, default='61')
+    parser.add_argument("--decay_points", type=str, default='5,10')
     parser.add_argument("--epoch", type=int, default=15)
-    parser.add_argument("--num_workers", type=int, default=20)
+    parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--disp_interval", type=int, default=100)
-    parser.add_argument("--snapshot_dir", type=str, default='')
+    parser.add_argument("--snapshot_dir", type=str, default='./runs/exp1/model/')
     parser.add_argument("--resume", type=str, default='False')
     parser.add_argument("--global_counter", type=int, default=0)
     parser.add_argument("--current_epoch", type=int, default=0)
-    parser.add_argument("--att_dir", type=str, default='./runs/')
+    parser.add_argument("--att_dir", type=str, default='./runs/exp1/accu_att/')
 
     return parser.parse_args()
 
@@ -83,6 +84,7 @@ def train(args):
     print(model)
     model.train()
     end = time.time()
+    
 
     while current_epoch < total_epoch:
         model.train()
