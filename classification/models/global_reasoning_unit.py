@@ -32,12 +32,12 @@ class GraphAttentionLayer(nn.Module):
         # Softmax to compute attention $\alpha_{ij}$
         self.softmax = nn.Softmax(dim=1)
         # Dropout layer to be applied for attention
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout()
 
     def forward(self, h: torch.Tensor, adj_mat: torch.Tensor):
 
         # Number of nodes
-        n_nodes = h.shape[0]
+        n_nodes = h.shape[2]
         g = self.linear(h).view(n_nodes, self.n_heads, self.n_hidden)
         g_repeat = g.repeat(n_nodes, 1, 1)
         g_repeat_interleave = g.repeat_interleave(n_nodes, dim=0)
@@ -80,7 +80,7 @@ class GAT(nn.Module):
         # Final graph attention layer where we average the heads
         self.output = GraphAttentionLayer(n_hidden, n_classes, 1, is_concat=False, dropout=dropout)
         # Dropout
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x: torch.Tensor, adj_mat: torch.Tensor):
 
@@ -100,7 +100,7 @@ class GCN(nn.Module):
 
     def __init__(self, num_state, num_node, bias=False):
         super(GCN, self).__init__()
-        self.conv1 = nn.Conv1d(num_node, num_node, kernel_size=5) # adjacent matrix 
+        self.conv1 = nn.Conv1d(num_node, num_node, kernel_size=1) # adjacent matrix 
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv1d(num_state, num_state, kernel_size=1, bias=bias)
 
@@ -118,12 +118,32 @@ class GloRe_Unit(nn.Module):
     def __init__(self, num_in, num_mid, 
                  ConvNd=nn.Conv3d,
                  BatchNormNd=nn.BatchNorm3d,
-                 normalize=False):
+                 normalize=False,
+                 out_features=128,
+                 n_heads=8,
+                 is_concat=True,
+                 dropout=0.6):
         super(GloRe_Unit, self).__init__()
         
         self.normalize = normalize
         self.num_s = int(2 * num_mid) # 128 -> feature_dim
         self.num_n = int(1 * num_mid) # 64 -> num_nodes
+
+        #######################Graph Attention##############################
+        self.dropout = nn.Dropout(dropout)
+
+        # Calculate the number of dimensions per head
+        if is_concat:
+            assert out_features % n_heads == 0
+            # If we are concatenating the multiple heads
+            self.n_hidden = out_features // n_heads
+        else:
+            # If we are averaging the multiple heads
+            self.n_hidden = out_features
+
+        # Graph Attention Network
+        self.gat = GAT(self.num_s, self.n_hidden, out_features, n_heads, dropout)
+        ####################################################################
 
         # dim reduction layer
         self.conv_state = ConvNd(num_in, self.num_s, kernel_size=1)
@@ -133,9 +153,6 @@ class GloRe_Unit(nn.Module):
 
         # Graph Convolution Network 
         self.gcn = GCN(num_state=self.num_s, num_node=self.num_n)
-
-        # Graph Attention Network
-        self.gat = GAT(self.in_features, self.n_hidden, self.n_classes, self.n_heads, self.dropout)
         
         # recover channel size 
         self.conv_extend = ConvNd(self.num_s, num_in, kernel_size=1, bias=False)
@@ -150,11 +167,11 @@ class GloRe_Unit(nn.Module):
 
         # hidden state 
         # feature map with reduced dim 
-        # output shape : (batch size, feature_dim, channel)
+        # output shape : (batch size, feature_dim, channel) -> (5, 128. 1024)
         x_state_reshaped = self.conv_state(x).view(n, self.num_s, -1)
 
         # projection matrix 
-        # output shape : (batch size, num_nodes, channel)
+        # output shape : (batch size, num_nodes, channel) -> (5, 64, 1024)
         x_proj_reshaped = self.conv_proj(x).view(n, self.num_n, -1)
 
         # reverse projection matrix 
@@ -176,7 +193,7 @@ class GloRe_Unit(nn.Module):
         x_n_rel, adj_matrix = self.gcn(x_n_state)
 
         #######################Graph Attention##############################
-
+        x_n_rel = self.gat(x_n_rel, adj_matrix)
         ####################################################################
         
         # matrix multiplication 
@@ -211,7 +228,11 @@ class GloRe_Unit_2D(GloRe_Unit):
         super(GloRe_Unit_2D, self).__init__(num_in, num_mid,
                                             ConvNd=nn.Conv2d,
                                             BatchNormNd=nn.BatchNorm2d,
-                                            normalize=normalize)
+                                            normalize=normalize,
+                                            out_features=128,
+                                            n_heads=8,
+                                            is_concat=True
+                                            )
 
 class GloRe_Unit_3D(GloRe_Unit):
     def __init__(self, num_in, num_mid, normalize=False):

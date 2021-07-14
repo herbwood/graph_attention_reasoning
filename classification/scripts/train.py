@@ -95,6 +95,9 @@ def train(args):
         
         index = 0  
         for idx, dat in enumerate(train_loader):
+            
+            # img shape : (batch, 3, 256, 256)
+            # label shape : (batch, 20)
             img_name, img, label = dat
             label = label.cuda(non_blocking=True)
             
